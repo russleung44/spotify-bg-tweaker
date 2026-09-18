@@ -10,15 +10,21 @@
     src: "bgt:src",
     opacity: "bgt:opacity",
     blur: "bgt:blur",
+    fontEnabled: "bgt:font:enabled",
+    fontFamily: "bgt:font:family",
+    fontSize: "bgt:font:size",
+    fontUrl: "bgt:font:url",
   };
   const DEF = {
     opacity: 50,
     blur: 10,
+    fontSize: 16,
     maxImgSize: 1920,
     quality: 0.85,
     maxStorageChars: 3_500_000,
     maxFileBytes: 12 * 1024 * 1024,
   };
+  const FONTFACE_ID = "bgt-fontface";
 
   // "picture" glyph for the profile-menu entry (Spicetify.SVGIcons has no image icon)
   const ICON =
@@ -69,6 +75,16 @@ body.bgt-active .Root__top-container::after {
    handles the rest) */
 body.bgt-active .customnight-bg-container {
   display: none !important;
+}
+/* ---------- custom font ---------- */
+html.bgt-font-on {
+  font-size: var(--bgt-font-size, 16px) !important;
+}
+body.bgt-font-on {
+  font-family: var(--bgt-font-stack) !important;
+  /* encore type classes resolve their font through these custom properties */
+  --font-family: var(--bgt-font-stack);
+  --encore-font-family: var(--bgt-font-stack);
 }
 `;
 
@@ -133,6 +149,7 @@ body.bgt-active .customnight-bg-container {
 
   // ---------- apply / DOM sync ----------
   let lastProbed = null;
+  let lastProbedFont = null;
   let lastSig = "";
   let mo = null;
   let syncQueued = false;
@@ -163,7 +180,13 @@ body.bgt-active .customnight-bg-container {
     const src = active ? String(get(K.src, "")) : "";
     const opacity = clamp(num(get(K.opacity, DEF.opacity), DEF.opacity), 0, 100);
     const blur = clamp(num(get(K.blur, DEF.blur), DEF.blur), 0, 100);
-    const sig = `${active}|${src}|${opacity}|${blur}`;
+
+    const fontOn = get(K.fontEnabled, "false") === "true" && (String(get(K.fontFamily, "")).trim() || String(get(K.fontUrl, "")).trim());
+    const family = String(get(K.fontFamily, "")).trim().replace(/"/g, "");
+    const fontUrl = String(get(K.fontUrl, "")).trim();
+    const fontSize = clamp(num(get(K.fontSize, DEF.fontSize), DEF.fontSize), 10, 28);
+
+    const sig = `${active}|${src}|${opacity}|${blur}|${fontOn}|${family}|${fontUrl}|${fontSize}`;
 
     // skip style churn unless something actually changed
     const existing = document.getElementById(LAYER_ID);
@@ -200,6 +223,39 @@ body.bgt-active .customnight-bg-container {
       const rs = document.documentElement.style;
       rs.setProperty("--bgt-opacity", String(opacity / 100));
       rs.setProperty("--bgt-blur", blur + "px");
+
+      // ---------- custom font ----------
+      const ff = document.getElementById(FONTFACE_ID);
+      if (fontOn) {
+        document.documentElement.classList.add("bgt-font-on");
+        document.body.classList.add("bgt-font-on");
+        const stack = (fontUrl ? '"BGT Custom", ' : '') + `"${family}", CircularSp, "Segoe UI", "Microsoft YaHei", sans-serif`;
+        rs.setProperty("--bgt-font-stack", stack);
+        rs.setProperty("--bgt-font-size", fontSize + "px");
+        if (fontUrl) {
+          const ffCss = `@font-face{font-family:"BGT Custom";src:url("${fontUrl.replace(/"/g, "%22")}");font-display:swap;}`;
+          if (ff) {
+            ff.textContent = ffCss;
+          } else {
+            const st = el("style");
+            st.id = FONTFACE_ID;
+            st.textContent = ffCss;
+            document.head.appendChild(st);
+          }
+          if (fontUrl !== lastProbedFont) {
+            lastProbedFont = fontUrl;
+            document.fonts.load('16px "BGT Custom"').then(loaded => {
+              if (!loaded.length) notify("字体加载失败 — 检查链接或换用系统字体");
+            }).catch(() => notify("字体加载失败 — 可能被 CSP 拦截"));
+          }
+        } else if (ff) {
+          ff.remove();
+        }
+      } else {
+        document.documentElement.classList.remove("bgt-font-on");
+        document.body.classList.remove("bgt-font-on");
+        if (ff) ff.remove();
+      }
     }
     sweep();
     observeAll();
@@ -239,15 +295,15 @@ body.bgt-active .customnight-bg-container {
   }
 
   // ---------- settings UI ----------
-  function sliderRow(key, label, fmt, fallback) {
+  function sliderRow(key, label, fmt, fallback, min = 0, max = 60) {
     const row = el("div", "display:flex;align-items:center;gap:10px;");
     row.append(el("span", "min-width:52px;font-size:12px;opacity:.75;", label));
     const input = document.createElement("input");
     input.type = "range";
-    input.min = 0;
-    input.max = key === K.opacity ? 100 : 60;
+    input.min = min;
+    input.max = max;
     input.step = 1;
-    input.value = clamp(num(get(key, fallback), fallback), 0, +input.max);
+    input.value = clamp(num(get(key, fallback), fallback), min, max);
     input.style.cssText = "flex:1;cursor:pointer;";
     const val = el("span", "min-width:44px;text-align:right;font-size:12px;opacity:.75;", fmt(+input.value));
     input.addEventListener("input", () => {
@@ -360,8 +416,64 @@ body.bgt-active .customnight-bg-container {
     wrap.append(row, fileInput);
 
     // opacity / blur sliders
-    wrap.append(sliderRow(K.opacity, "Opacity", v => `${v}%`, DEF.opacity));
-    wrap.append(sliderRow(K.blur, "Blur", v => `${v}px`, DEF.blur));
+    wrap.append(sliderRow(K.opacity, "Opacity", v => `${v}%`, DEF.opacity, 0, 100));
+    wrap.append(sliderRow(K.blur, "Blur", v => `${v}px`, DEF.blur, 0, 60));
+
+    // ---------- font ----------
+    wrap.append(el("div", "margin-top:4px;opacity:.75;", "Font"));
+    const fontToggle = el("label", "display:flex;align-items:center;gap:8px;cursor:pointer;");
+    const fontCb = document.createElement("input");
+    fontCb.type = "checkbox";
+    fontCb.checked = get(K.fontEnabled, "false") === "true";
+    fontCb.addEventListener("change", () => {
+      set(K.fontEnabled, fontCb.checked);
+      syncDom();
+    });
+    fontToggle.append(fontCb, el("span", null, "Enable custom font"));
+    wrap.append(fontToggle);
+
+    const INPUT_STYLE = "width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:inherit;font-size:13px;outline:none;";
+
+    const famInput = el("input");
+    famInput.type = "text";
+    famInput.placeholder = "Installed font name, e.g. Microsoft YaHei";
+    famInput.value = String(get(K.fontFamily, ""));
+    famInput.style.cssText = INPUT_STYLE;
+    const applyFam = () => {
+      set(K.fontFamily, famInput.value.trim());
+      syncDom();
+    };
+    let famTimer = null;
+    famInput.addEventListener("input", () => {
+      clearTimeout(famTimer);
+      famTimer = setTimeout(applyFam, 400);
+    });
+    famInput.addEventListener("keydown", e => { if (e.key === "Enter") { clearTimeout(famTimer); applyFam(); } });
+    famInput.addEventListener("change", applyFam);
+    wrap.append(famInput);
+
+    const fontUrlInput = el("input");
+    fontUrlInput.type = "text";
+    fontUrlInput.placeholder = "Font file URL (.woff2/.ttf, optional)";
+    fontUrlInput.value = String(get(K.fontUrl, ""));
+    fontUrlInput.style.cssText = INPUT_STYLE;
+    const applyFontUrl = () => {
+      const v = fontUrlInput.value.trim();
+      if (!v || /^https?:\/\//i.test(v)) {
+        set(K.fontUrl, v);
+        syncDom();
+      }
+    };
+    let fuTimer = null;
+    fontUrlInput.addEventListener("input", () => {
+      clearTimeout(fuTimer);
+      fuTimer = setTimeout(applyFontUrl, 400);
+    });
+    fontUrlInput.addEventListener("keydown", e => { if (e.key === "Enter") { clearTimeout(fuTimer); applyFontUrl(); } });
+    fontUrlInput.addEventListener("change", applyFontUrl);
+    wrap.append(fontUrlInput);
+
+    wrap.append(sliderRow(K.fontSize, "Size", v => `${v}px`, DEF.fontSize, 10, 28));
 
     // enable toggle
     const toggle = el("label", "display:flex;align-items:center;gap:8px;cursor:pointer;");
