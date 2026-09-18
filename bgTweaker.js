@@ -394,6 +394,18 @@ body.bgt-font-on {
     wrap.append(sliderRow(K.opacity, "Opacity", v => `${v}%`, DEF.opacity, 0, 100));
     wrap.append(sliderRow(K.blur, "Blur", v => `${v}px`, DEF.blur, 0, 60));
 
+    // enable toggle
+    const toggle = el("label", "display:flex;align-items:center;gap:8px;cursor:pointer;");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = get(K.enabled, "true") === "true";
+    cb.addEventListener("change", () => {
+      set(K.enabled, cb.checked);
+      syncDom();
+    });
+    toggle.append(cb, el("span", null, "Enable background"));
+    wrap.append(toggle);
+
     // ---------- font ----------
     wrap.append(el("div", "margin-top:4px;opacity:.75;", "Font"));
     const fontToggle = el("label", "display:flex;align-items:center;gap:8px;cursor:pointer;");
@@ -428,18 +440,6 @@ body.bgt-font-on {
     wrap.append(famInput);
 
     wrap.append(sliderRow(K.fontSize, "Size", v => `${v}px`, DEF.fontSize, 10, 28));
-
-    // enable toggle
-    const toggle = el("label", "display:flex;align-items:center;gap:8px;cursor:pointer;");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = get(K.enabled, "true") === "true";
-    cb.addEventListener("change", () => {
-      set(K.enabled, cb.checked);
-      syncDom();
-    });
-    toggle.append(cb, el("span", null, "Enable background"));
-    wrap.append(toggle);
 
     if (Spicetify.PopupModal && Spicetify.PopupModal.display) {
       Spicetify.PopupModal.display({ title: "Background Tweaker", content: wrap, isLarge: false });
