@@ -2,7 +2,7 @@
   {
     "name": "Background Tweaker",
     "description": "Set a custom background image for Spotify with adjustable opacity and blur. Supports image URL or local upload.",
-    "preview": "preview.png",
+    "preview": "preview.jpg",
     "main": "bgTweaker.js",
     "readme": "README.md",
     "tags": ["background", "wallpaper", "blur", "opacity"]

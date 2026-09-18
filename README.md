@@ -35,8 +35,8 @@ This repo already follows the [Publishing to Marketplace](https://github.com/spi
 
 - `manifest.json` in the root ✅
 - `main` → `bgTweaker.js`, `readme` → `README.md` ✅
-- Add a screenshot as `preview.png` in the root before publishing ⚠️
-- Push to a public GitHub repo and add the topic tag **`spicetify-extensions`**
+- `preview.jpg` — currently a placeholder; replace with a real screenshot of the extension in action
+- Public GitHub repo with the topic tag **`spicetify-extensions`**
 
 ## Uninstall
 
