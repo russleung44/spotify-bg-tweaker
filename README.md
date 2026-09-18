@@ -9,7 +9,7 @@ Spicetify 扩展：自定义 Spotify 背景图片，可调节 **透明度（opac
 - Background image behind the whole Spotify UI (top bar / sidebar / main view become transparent)
 - Opacity slider (0–100%) and blur slider (0–60px), applied live
 - Image source: any `https://` URL, or upload a local image (auto-downscaled to ≤1920px JPEG and stored locally)
-- **Custom font**: any installed system font, optional font-file URL (`woff2`/`ttf` via `@font-face`), and UI font size (10–28px)
+- **Custom font**: any installed system font, plus UI font size (10–28px)
 - Highest background priority — theme/snippet backgrounds are suppressed while ours is active, restored when disabled
 - Settings persist across restarts; toggle on/off anytime
 
@@ -29,7 +29,7 @@ Open the **profile menu (top-right avatar) → Background Tweaker**:
 
 1. Paste an image URL, or click **Upload local image…**
 2. Adjust **Opacity** / **Blur** sliders (changes apply instantly)
-3. **Font** section: enable it, type an installed font's name and/or a font-file URL, set the UI size
+3. **Font** section: enable it, type an installed font's name, set the UI size
 4. **Enable background** checkbox to temporarily disable the background without losing settings (the font toggle works the same way)
 
 ## Publish to Marketplace

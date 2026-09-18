@@ -13,7 +13,6 @@
     fontEnabled: "bgt:font:enabled",
     fontFamily: "bgt:font:family",
     fontSize: "bgt:font:size",
-    fontUrl: "bgt:font:url",
   };
   const DEF = {
     opacity: 50,
@@ -24,7 +23,6 @@
     maxStorageChars: 3_500_000,
     maxFileBytes: 12 * 1024 * 1024,
   };
-  const FONTFACE_ID = "bgt-fontface";
 
   // "picture" glyph for the profile-menu entry (Spicetify.SVGIcons has no image icon)
   const ICON =
@@ -149,7 +147,6 @@ body.bgt-font-on {
 
   // ---------- apply / DOM sync ----------
   let lastProbed = null;
-  let lastProbedFont = null;
   let lastSig = "";
   let mo = null;
   let syncQueued = false;
@@ -181,12 +178,11 @@ body.bgt-font-on {
     const opacity = clamp(num(get(K.opacity, DEF.opacity), DEF.opacity), 0, 100);
     const blur = clamp(num(get(K.blur, DEF.blur), DEF.blur), 0, 100);
 
-    const fontOn = get(K.fontEnabled, "false") === "true" && (String(get(K.fontFamily, "")).trim() || String(get(K.fontUrl, "")).trim());
+    const fontOn = get(K.fontEnabled, "false") === "true" && !!String(get(K.fontFamily, "")).trim();
     const family = String(get(K.fontFamily, "")).trim().replace(/"/g, "");
-    const fontUrl = String(get(K.fontUrl, "")).trim();
     const fontSize = clamp(num(get(K.fontSize, DEF.fontSize), DEF.fontSize), 10, 28);
 
-    const sig = `${active}|${src}|${opacity}|${blur}|${fontOn}|${family}|${fontUrl}|${fontSize}`;
+    const sig = `${active}|${src}|${opacity}|${blur}|${fontOn}|${family}|${fontSize}`;
 
     // skip style churn unless something actually changed
     const existing = document.getElementById(LAYER_ID);
@@ -225,36 +221,15 @@ body.bgt-font-on {
       rs.setProperty("--bgt-blur", blur + "px");
 
       // ---------- custom font ----------
-      const ff = document.getElementById(FONTFACE_ID);
       if (fontOn) {
         document.documentElement.classList.add("bgt-font-on");
         document.body.classList.add("bgt-font-on");
-        const stack = (fontUrl ? '"BGT Custom", ' : '') + `"${family}", CircularSp, "Segoe UI", "Microsoft YaHei", sans-serif`;
+        const stack = `"${family}", CircularSp, "Segoe UI", "Microsoft YaHei", sans-serif`;
         rs.setProperty("--bgt-font-stack", stack);
         rs.setProperty("--bgt-font-size", fontSize + "px");
-        if (fontUrl) {
-          const ffCss = `@font-face{font-family:"BGT Custom";src:url("${fontUrl.replace(/"/g, "%22")}");font-display:swap;}`;
-          if (ff) {
-            ff.textContent = ffCss;
-          } else {
-            const st = el("style");
-            st.id = FONTFACE_ID;
-            st.textContent = ffCss;
-            document.head.appendChild(st);
-          }
-          if (fontUrl !== lastProbedFont) {
-            lastProbedFont = fontUrl;
-            document.fonts.load('16px "BGT Custom"').then(loaded => {
-              if (!loaded.length) notify("字体加载失败 — 检查链接或换用系统字体");
-            }).catch(() => notify("字体加载失败 — 可能被 CSP 拦截"));
-          }
-        } else if (ff) {
-          ff.remove();
-        }
       } else {
         document.documentElement.classList.remove("bgt-font-on");
         document.body.classList.remove("bgt-font-on");
-        if (ff) ff.remove();
       }
     }
     sweep();
@@ -451,27 +426,6 @@ body.bgt-font-on {
     famInput.addEventListener("keydown", e => { if (e.key === "Enter") { clearTimeout(famTimer); applyFam(); } });
     famInput.addEventListener("change", applyFam);
     wrap.append(famInput);
-
-    const fontUrlInput = el("input");
-    fontUrlInput.type = "text";
-    fontUrlInput.placeholder = "Font file URL (.woff2/.ttf, optional)";
-    fontUrlInput.value = String(get(K.fontUrl, ""));
-    fontUrlInput.style.cssText = INPUT_STYLE;
-    const applyFontUrl = () => {
-      const v = fontUrlInput.value.trim();
-      if (!v || /^https?:\/\//i.test(v)) {
-        set(K.fontUrl, v);
-        syncDom();
-      }
-    };
-    let fuTimer = null;
-    fontUrlInput.addEventListener("input", () => {
-      clearTimeout(fuTimer);
-      fuTimer = setTimeout(applyFontUrl, 400);
-    });
-    fontUrlInput.addEventListener("keydown", e => { if (e.key === "Enter") { clearTimeout(fuTimer); applyFontUrl(); } });
-    fontUrlInput.addEventListener("change", applyFontUrl);
-    wrap.append(fontUrlInput);
 
     wrap.append(sliderRow(K.fontSize, "Size", v => `${v}px`, DEF.fontSize, 10, 28));
 
