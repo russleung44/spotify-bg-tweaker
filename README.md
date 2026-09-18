@@ -1,22 +1,37 @@
 # Background Tweaker
 
-Spicetify extension: set a custom background image for Spotify, with adjustable **opacity** and **blur**. Supports **image URL** or **local upload**.
+[Spicetify](https://spicetify.app) extension: set a **custom background image** for Spotify with adjustable **opacity** and **blur**, and optionally apply a **custom font**. Supports image URL or local upload.
 
-Spicetify 扩展：自定义 Spotify 背景图片，可调节 **透明度（opacity）** 和 **模糊（blur）**，支持 **图片链接** 或 **本地上传**。
+Spicetify 扩展：自定义 Spotify **背景图片**（可调透明度/模糊，支持图片链接或本地上传）与**自定义字体**（系统字体 + 字号）。
 
 ## Features
 
-- Background image behind the whole Spotify UI (top bar / sidebar / main view become transparent)
+**Background**
+- Image behind the whole Spotify UI — top bar, sidebar and main view become transparent
 - Opacity slider (0–100%) and blur slider (0–60px), applied live
 - Image source: any `https://` URL, or upload a local image (auto-downscaled to ≤1920px JPEG and stored locally)
-- **Custom font**: any installed system font, plus UI font size (10–28px)
-- Highest background priority — theme/snippet backgrounds are suppressed while ours is active, restored when disabled
-- Settings persist across restarts; toggle on/off anytime
 
-## Install (manual)
+**Font**
+- Use any installed system font (e.g. `Microsoft YaHei`, `JetBrains Mono`)
+- UI font size slider (10–28px)
+- Covers both legacy text and Encore-based components (`--font-family` / `--encore-font-family`)
+
+**General**
+- **Highest background priority**: theme/snippet backgrounds (pseudo-element layers, dedicated background containers, full-screen fixed layers) are suppressed while our background is active — and restored when you disable it
+- Independent toggles for background and font; settings persist across restarts
+- Live preview thumbnail, debounced inputs, fallback dialog when `Spicetify.PopupModal` is unavailable
+
+## Install
+
+### From Marketplace (recommended)
+
+Search **Background Tweaker** in [Spicetify Marketplace](https://github.com/spicetify/marketplace) and click install.
+
+### Manual
+
+Copy `bgTweaker.js` to your Extensions folder, then:
 
 ```powershell
-# copy bgTweaker.js to your Extensions folder, then:
 spicetify config extensions bgTweaker.js
 spicetify apply
 ```
@@ -27,19 +42,19 @@ Extensions folder on Windows: `%APPDATA%\spicetify\Extensions`
 
 Open the **profile menu (top-right avatar) → Background Tweaker**:
 
-1. Paste an image URL, or click **Upload local image…**
-2. Adjust **Opacity** / **Blur** sliders (changes apply instantly)
-3. **Font** section: enable it, type an installed font's name, set the UI size
-4. **Enable background** checkbox to temporarily disable the background without losing settings (the font toggle works the same way)
+| Section | What it does |
+| --- | --- |
+| Image URL / Upload | Paste an image URL, or upload a local image |
+| Opacity / Blur | Adjust transparency and blur — changes apply instantly |
+| Enable background | Temporarily disable the background without losing settings |
+| Font | Enable, type an installed font's name, set the UI size |
 
-## Publish to Marketplace
+## Notes
 
-This repo already follows the [Publishing to Marketplace](https://github.com/spicetify/marketplace/wiki/Publishing-to-Marketplace) format:
-
-- `manifest.json` in the root ✅
-- `main` → `bgTweaker.js`, `readme` → `README.md` ✅
-- `preview.jpg` — currently a placeholder; replace with a real screenshot of the extension in action
-- Public GitHub repo with the topic tag **`spicetify-extensions`**
+- Local images are stored as compressed base64 in Spicetify's localStorage (~5 MB limit); very large files (>12 MB) are rejected up front — use a URL for huge images.
+- Fonts must be installed on your system; the font fallback stack ends in `CircularSp → Segoe UI → Microsoft YaHei → sans-serif`.
+- While the background is active, third-party background layers are hidden automatically. Unchecking **Enable background** brings them back untouched.
+- Selectors target the current Spotify UI (`.Root__top-container` etc.); a major Spotify update may require updating them.
 
 ## Uninstall
 
@@ -48,8 +63,8 @@ spicetify config extensions- bgTweaker.js
 spicetify apply
 ```
 
-## Notes
+(If installed via Marketplace, remove it from the Marketplace app instead.)
 
-- **Highest background priority**: while enabled, this extension claims the background — theme/snippet backgrounds are suppressed automatically (pseudo-element layers like `body::before`, dedicated background containers, full-screen fixed layers). Disable our background (uncheck *Enable background*) to bring them back.
-- Local images are stored as compressed base64 in Spicetify's localStorage (~5MB limit); very large files are rejected — use a URL for huge images.
-- Selectors target the current Spotify UI (`.Root__top-container`); a major Spotify update may require updating them.
+## License
+
+[MIT](LICENSE)
