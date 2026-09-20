@@ -79,10 +79,14 @@ html.bgt-font-on {
   font-size: var(--bgt-font-size, 16px) !important;
 }
 body.bgt-font-on {
-  font-family: var(--bgt-font-stack) !important;
   /* encore type classes resolve their font through these custom properties */
   --font-family: var(--bgt-font-stack);
   --encore-font-family: var(--bgt-font-stack);
+}
+/* universal override — beats the explicit font-family on encore type classes */
+body.bgt-font-on,
+body.bgt-font-on *:not(svg, svg *):not(style):not(script) {
+  font-family: var(--bgt-font-stack) !important;
 }
 `;
 
@@ -181,6 +185,7 @@ body.bgt-font-on {
     const fontOn = get(K.fontEnabled, "false") === "true" && !!String(get(K.fontFamily, "")).trim();
     const family = String(get(K.fontFamily, "")).trim().replace(/"/g, "");
     const fontSize = clamp(num(get(K.fontSize, DEF.fontSize), DEF.fontSize), 10, 28);
+    const stack = `"${family}", CircularSp, "Segoe UI", "Microsoft YaHei", sans-serif`;
 
     const sig = `${active}|${src}|${opacity}|${blur}|${fontOn}|${family}|${fontSize}`;
 
@@ -224,7 +229,6 @@ body.bgt-font-on {
       if (fontOn) {
         document.documentElement.classList.add("bgt-font-on");
         document.body.classList.add("bgt-font-on");
-        const stack = `"${family}", CircularSp, "Segoe UI", "Microsoft YaHei", sans-serif`;
         rs.setProperty("--bgt-font-stack", stack);
         rs.setProperty("--bgt-font-size", fontSize + "px");
       } else {
@@ -233,7 +237,32 @@ body.bgt-font-on {
       }
     }
     sweep();
+    applyFontToIframes(fontOn, stack, fontSize);
     observeAll();
+  }
+
+  // custom apps (Marketplace, lyrics, …) render in same-origin iframes the main
+  // document's CSS can't reach — inject a standalone font style into each one
+  function applyFontToIframes(on, stack, size) {
+    const css = on
+      ? `:root{font-size:${size}px !important;}body,body *:not(svg,svg *):not(style):not(script){font-family:${stack} !important;}`
+      : "";
+    for (const frame of document.querySelectorAll("iframe")) {
+      let doc;
+      try { doc = frame.contentDocument; } catch { continue; }
+      if (!doc) continue;
+      let st = doc.getElementById("bgt-iframe-font");
+      if (on) {
+        if (!st) {
+          st = doc.createElement("style");
+          st.id = "bgt-iframe-font";
+          (doc.head || doc.documentElement).appendChild(st);
+        }
+        if (st.textContent !== css) st.textContent = css;
+      } else if (st) {
+        st.remove();
+      }
+    }
   }
 
   // ---------- local image → downscaled data URL ----------
