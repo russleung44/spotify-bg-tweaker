@@ -60,6 +60,19 @@ body.bgt-active .Root__now-playing-bar > * {
   background-color: transparent !important;
   background-image: none !important;
 }
+/* page-level color washes on playlist/album/home/artist pages */
+body.bgt-active .main-actionBarBackground-background,
+body.bgt-active .main-entityHeader-background,
+body.bgt-active .under-main-view,
+body.bgt-active .under-main-view > * {
+  background-color: transparent !important; /* keep a real photo if one is set */
+}
+body.bgt-active .main-entityHeader-backgroundColor,
+body.bgt-active .main-entityHeader-overlay,
+body.bgt-active .main-home-homeHeader {
+  background-color: transparent !important;
+  background-image: none !important;
+}
 /* while our background is active, suppress theme/snippet background painting:
    pseudo-element layers on top-level containers … */
 html.bgt-active::before, html.bgt-active::after,
@@ -113,8 +126,166 @@ body.bgt-font-on *:not(svg, svg *):not(style):not(script) {
   function isSafeNode(node) {
     if (!(node instanceof Element)) return true;
     if (node.id === LAYER_ID) return true;
-    const cls = typeof node.className === "string" ? node.className : "";
-    return SAFE_PATTERN.test(node.id + " " + cls);
+    return SAFE_PATTERN.test(safeId(node));
+  }
+
+  // ---------- deep sweep: opaque page backgrounds inside every panel ----------
+  // Newer Spotify builds give page wrappers (playlist/album header + tracklist,
+  // library sidebar content, …) hashed class names that change every release,
+  // so they can't be targeted from CSS. Instead, while our background is
+  // active, clear the background of any element that paints a fully opaque,
+  // panel-filling background — gradient washes included, real photos (url
+  // backgrounds) kept. Restored when ours is disabled.
+  // tags that plausibly paint page-sized backgrounds — matched with one
+  // selector per sweep instead of walking every element
+  const BG_SELECTOR = "div,section,main,header,nav,aside,article,ul";
+  const MIN_BG_HEIGHT = 120; // px — rows/chips/toolbars stay untouched
+  const clearedBg = new Map(); // element -> { c, i } inline values before clearing (i: null = image untouched)
+  // "not opaque" verdicts, keyed to class + inline style — cheap to compare
+  // without touching computed styles. Reset wholesale on route changes, which
+  // is when Spotify's per-playlist recoloring rewrites CSS custom properties
+  // (something this key can't see)
+  let bgSig = new WeakMap();
+
+  const clsOf = n => (typeof n.className === "string" ? n.className : "");
+  const safeId = n => n.id + " " + clsOf(n);
+  const sigOf = n => clsOf(n) + "|" + n.style.cssText;
+
+  // alpha of a computed color in any serialization: legacy rgb()/rgba()/hsl()
+  // commas, or modern space syntax — rgb(1 2 3 / .5), oklab(…) — which newer
+  // Spotify color tokens emit
+  function bgAlpha(color) {
+    const m = /^[a-z-]+\(([^)]*)\)$/i.exec(color.trim());
+    if (!m) return null;
+    const slash = m[1].split("/");
+    if (slash.length === 2) return parseFloat(slash[1]);
+    if (!m[1].includes(",")) return 1; // modern syntax without alpha = opaque
+    const parts = m[1].split(",");
+    return parts.length === 3 ? 1 : parts.length === 4 ? parseFloat(parts[3]) : null;
+  }
+
+  // split a computed background-image into its top-level layers (comma-split
+  // that respects parens and quotes — data URIs and gradients contain commas)
+  function bgLayers(img) {
+    const out = [];
+    let depth = 0, start = 0, inStr = null;
+    for (let i = 0; i < img.length; i++) {
+      const ch = img[i];
+      if (inStr) {
+        if (ch === inStr) inStr = null;
+      } else if (ch === '"' || ch === "'") inStr = ch;
+      else if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+      else if (ch === "," && depth === 0) { out.push(img.slice(start, i)); start = i + 1; }
+    }
+    out.push(img.slice(start));
+    return out.map(s => s.trim()).filter(Boolean);
+  }
+  const isWashLayer = l => /gradient\(/i.test(l) || /^url\(["']?data:/i.test(l); // washes & noise textures, not photos
+
+  function restoreClearedBg() {
+    for (const [node, prev] of clearedBg) {
+      try {
+        if (prev.c != null) node.style.backgroundColor = prev.c;
+        if (prev.i != null) node.style.backgroundImage = prev.i;
+      } catch {}
+    }
+    clearedBg.clear();
+  }
+
+  function sweepPanel(host) {
+    // width reference is the panel itself, so narrow side panels get the same
+    // treatment as the wide main view
+    const hostW = host.getBoundingClientRect().width;
+    if (hostW < 100) return;
+    for (const node of host.querySelectorAll(BG_SELECTOR)) {
+      const prev = clearedBg.get(node);
+      const cheapSig = sigOf(node);
+      // unchanged since we last looked — skip without reading computed styles
+      // (this is what keeps steady-state sweeps cheap)
+      if (!prev && bgSig.get(node) === cheapSig) continue;
+      let s;
+      try { s = getComputedStyle(node); } catch { continue; }
+      // does it paint something that hides the wallpaper? an opaque background
+      // color OR a gradient wash (which may sit on a transparent color — e.g.
+      // the playlist header's 180px fade from transparent to --background-base)
+      let clear = false, wipeColor = false, wipeImage = false;
+      if (s.position !== "fixed" && !SAFE_PATTERN.test(safeId(node))) {
+        const r = node.getBoundingClientRect();
+        // page wrappers scroll, so taller than the panel is normal — wider
+        // than it means flyout/dropdown, not a page surface
+        if (r.width >= hostW * 0.9 && r.height >= MIN_BG_HEIGHT && r.width <= hostW * 1.05) {
+          // For already-cleared nodes the computed color is OUR OWN transparent
+          // override (alpha 0) — re-reading it here would flip-flop restore/
+          // clear forever. Trust the original verdict; only geometry above and
+          // safety are re-validated.
+          if (prev) {
+            wipeColor = prev.c != null;
+            wipeImage = prev.i != null;
+          } else {
+            wipeColor = bgAlpha(s.backgroundColor) === 1;
+            wipeImage = bgLayers(s.backgroundImage).some(isWashLayer);
+          }
+          clear = wipeColor || wipeImage;
+        }
+      }
+      if (clear) {
+        if (!prev) clearedBg.set(node, {
+          c: wipeColor ? node.style.backgroundColor : null,
+          i: wipeImage ? node.style.backgroundImage : null,
+        });
+        // re-assert — React rewrites inline styles when it re-renders
+        if (wipeColor) node.style.setProperty("background-color", "transparent", "important");
+        if (wipeImage) {
+          // drop wash layers, keep real photos (url layers, minus noise data URIs)
+          const src = node.style.backgroundImage !== "" ? node.style.backgroundImage : s.backgroundImage;
+          const kept = bgLayers(src).filter(l => !isWashLayer(l));
+          node.style.setProperty("background-image", kept.length ? kept.join(", ") : "none", "important");
+        }
+      } else if (prev) {
+        // no longer qualifies (moved, shrunk, …) — put the original back.
+        // Don't cache a verdict: a transient geometry read must retry soon.
+        if (prev.c != null) node.style.backgroundColor = prev.c;
+        if (prev.i != null) node.style.backgroundImage = prev.i;
+        clearedBg.delete(node);
+      } else {
+        bgSig.set(node, cheapSig); // remember the "no" verdict for this exact look
+      }
+    }
+  }
+
+  function sweepMainView() {
+    // prune detached nodes FIRST — restore just those, in case React
+    // re-attaches them. A detachment also means React swapped route content:
+    // forget the "no" verdicts so recolored wrappers get re-checked this pass
+    let detached = false;
+    for (const [node, prev] of [...clearedBg]) {
+      if (!node.isConnected) {
+        try {
+          if (prev.c != null) node.style.backgroundColor = prev.c;
+          if (prev.i != null) node.style.backgroundImage = prev.i;
+        } catch {}
+        clearedBg.delete(node);
+        detached = true;
+      }
+    }
+    if (detached) bgSig = new WeakMap();
+    // every direct child panel of the top container (main view, library
+    // sidebar, right sidebar) — hashed class names, so go by grid position;
+    // the caller (sweep) guarantees the background is active
+    const root = document.querySelector(".Root__top-container");
+    if (root) {
+      for (const panel of root.children) {
+        if (panel.id === LAYER_ID) continue;
+        // only the top bar is exempt: CSS handles it, and its dropdowns need
+        // contrast. Root__-prefixed panels from older builds still get swept.
+        if (/globalnav/i.test(safeId(panel))) continue;
+        sweepPanel(panel);
+      }
+    } else {
+      const mv = document.querySelector(".main-view-container");
+      if (mv) sweepPanel(mv);
+    }
   }
 
   function sweep() {
@@ -123,6 +294,7 @@ body.bgt-font-on *:not(svg, svg *):not(style):not(script) {
         try { node.style.display = prev; } catch {}
       }
       hiddenByUs.clear();
+      restoreClearedBg();
       return;
     }
     for (const parent of [document.body, document.getElementById("main")]) {
@@ -147,6 +319,7 @@ body.bgt-font-on *:not(svg, svg *):not(style):not(script) {
     for (const node of [...hiddenByUs.keys()]) {
       if (!node.isConnected) hiddenByUs.delete(node);
     }
+    sweepMainView();
   }
 
   // ---------- apply / DOM sync ----------
@@ -168,11 +341,17 @@ body.bgt-font-on *:not(svg, svg *):not(style):not(script) {
   function observeAll() {
     if (!mo) {
       mo = new MutationObserver(queueSync);
+      // top-level childList catches portal layers and full-document swaps; the
+      // subtree subscription is scoped to the top container, where route
+      // changes swap opaque page wrappers — so playbar/menu churn doesn't
+      // trigger a sweep too. Re-observing the same node is a no-op per spec.
       mo.observe(document.body, { childList: true });
+      window.addEventListener("resize", queueSync);
     }
-    const main = document.getElementById("main");
-    if (main) {
-      try { mo.observe(main, { childList: true }); } catch {}
+    const scoped = document.querySelector(".Root__top-container")
+      || document.querySelector(".main-view-container");
+    if (scoped) {
+      try { mo.observe(scoped, { childList: true, subtree: true }); } catch {}
     }
   }
 
